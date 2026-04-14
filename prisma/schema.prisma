@@ -1,0 +1,163 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FULFILLED
+  CANCELLED
+  REFUNDED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  CANCELLED
+}
+
+enum PaymentProvider {
+  SIMULATED
+}
+
+model User {
+  id              String           @id // Clerk user id
+  email           String           @unique
+  name            String?
+  role            UserRole         @default(CUSTOMER)
+  profile         UserProfile?
+  addresses       Address[]
+  orders          Order[]
+  paymentSessions PaymentSession[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model UserProfile {
+  userId              String   @id
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  age                 Int?
+  phone               String?
+  preferredCategories String[] @default([])
+  clothingSizes       String[] @default([])
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model Address {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName   String
+  phone      String?
+  line1      String
+  line2      String?
+  city       String
+  state      String
+  postalCode String
+  country    String   @default("IN")
+  isDefault  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId, isDefault])
+}
+
+model Category {
+  id          String    @id @default(cuid())
+  name        String
+  slug        String    @unique
+  description String?
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  slug        String      @unique
+  description String
+  priceMinor  Int
+  currency    String      @default("INR")
+  stock       Int         @default(0)
+  images      String[]
+  categoryId  String
+  category    Category    @relation(fields: [categoryId], references: [id])
+  isFeatured  Boolean     @default(false)
+  isActive    Boolean     @default(true)
+  orderItems  OrderItem[]
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  @@index([categoryId, isActive])
+  @@index([isFeatured])
+}
+
+model Order {
+  id                      String          @id @default(cuid())
+  userId                  String
+  user                    User            @relation(fields: [userId], references: [id])
+  status                  OrderStatus     @default(PENDING)
+  currency                String          @default("INR")
+  totalAmountMinor        Int
+  shippingAddressSnapshot Json?
+  items                   OrderItem[]
+  paymentSession          PaymentSession? @relation("OrderPayment")
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  @@index([userId, createdAt])
+}
+
+model OrderItem {
+  id                  String   @id @default(cuid())
+  orderId             String
+  order               Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId           String
+  product             Product  @relation(fields: [productId], references: [id])
+  quantity            Int
+  pricePaidMinor      Int
+  productNameSnapshot String
+  productSlugSnapshot String
+  createdAt           DateTime @default(now())
+
+  @@index([orderId])
+  @@index([productId])
+}
+
+model PaymentSession {
+  id                      String          @id @default(cuid())
+  userId                  String
+  user                    User            @relation(fields: [userId], references: [id])
+  provider                PaymentProvider @default(SIMULATED)
+  status                  PaymentStatus   @default(PENDING)
+  amountMinor             Int
+  currency                String          @default("INR")
+  cartSnapshot            Json
+  shippingAddressSnapshot Json?
+  scenario                String?
+  idempotencyKey          String?         @unique
+  externalReference       String          @unique
+  orderId                 String?         @unique
+  order                   Order?          @relation("OrderPayment", fields: [orderId], references: [id])
+  resolvedAt              DateTime?
+  createdAt               DateTime        @default(now())
+  updatedAt               DateTime        @updatedAt
+
+  @@index([userId, status, createdAt])
+}
+
+
